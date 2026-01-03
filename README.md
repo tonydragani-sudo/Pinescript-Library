@@ -16,3 +16,8 @@ Indicators:
 <p align="center">
   <img src="Docs/TrendEfficieny.png" width="600">
 </p>
+
+Stratagies:
+  >EMA Scalper - The EMA scalper is based off of ema bounces and distances between EMAs. All inputs are variable, I recommend 8 and 13. The stratagy will fire when the slower EMA is touched and then crosses back through the faster EMA given distance between EMAs and VWAP are validated.
+
+  >Turtle Scalper - Turtle Scalper is a very simple strategy. It takes the famous turtle strategy and attempts to pivot it to lower timeframes. timeframes are variable, as is Stop Loss(ATR based). 

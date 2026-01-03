@@ -1,0 +1,17 @@
+//@version=6
+indicator("Trend-Efficiency Line", overlay=false, precision=2)
+
+look = input.int(20, "Efficiency look-back (bars)")
+th   = input.float(0.30, "Trend threshold (0-1)")
+
+eff = math.abs(close - close[look]) / (ta.sma(ta.tr, look) + 1e-5)
+
+plot(eff, color=eff>th?color.green:color.orange, linewidth=3)
+bgcolor(eff>th?color.new(color.green,85):na)
+hline(th, "Trend", color=color.gray)
+
+// ----- ALERT: efficiency first cross ≥ 2.0 -----
+var bool wasBelow = true                          // track previous state
+if eff >= 2.0 and wasBelow                        // just crossed upward
+    alert("Strong trend started: efficiency ≥ 2.0", alert.freq_once_per_bar)
+wasBelow := eff < 2.0                             // reset for next cross

@@ -1,0 +1,110 @@
+//@version=6
+strategy("NQ 1m VWAP+EMA Pullback Scalper (Long Only, v6 with Filters)", overlay=true, default_qty_type=strategy.fixed, default_qty_value=1, initial_capital=100000)
+
+// === Inputs ===
+ema_fast_len       = input.int(9, "Fast EMA length")
+ema_slow_len       = input.int(21, "Slow EMA length")
+use_vwap           = input.bool(true, "Use VWAP bias (price > VWAP)")
+use_volume_confirm = input.bool(false, "Require volume confirmation")
+vol_sma_len        = input.int(20, "Volume SMA length")
+vol_mult           = input.float(1.5, "Volume spike multiplier", step=0.1)
+
+use_fixed_targets  = input.bool(false, "Use fixed tick target/stop instead of ATR")
+fixed_target_ticks = input.int(8, "Fixed target (ticks)")
+fixed_stop_ticks   = input.int(5, "Fixed stop (ticks)")
+
+atr_len            = input.int(14, "ATR length")
+atr_stop_mult      = input.float(1.0, "ATR stop multiplier", step=0.1)
+atr_target_mult    = input.float(1.5, "ATR target multiplier", step=0.1)
+
+min_lower_wick_atr_frac = input.float(0.12, "Min lower-wick (fraction of ATR)", step=0.01)
+
+max_bars_open      = input.int(20, "Timeout: max bars to hold scalp", minval=1)
+max_trades_per_day = input.int(50, "Max trades per day (0 = unlimited)", minval=0)
+
+use_time_filter    = input.bool(true, "Enable session filter (RTH example)")
+session_hours      = input.session("0830-1500", "Active session (hhmm-hhmm)")
+
+plot_signals       = input.bool(true, "Plot entry signals on chart")
+plot_debug_labels  = input.bool(false, "Show stop/limit labels on entry")
+
+// --- New Filter Inputs ---
+use_atr_filter     = input.bool(true, "Use ATR filter")
+min_atr            = input.float(2.0, "Min ATR (points)", step=0.25)
+
+use_slope_filter   = input.bool(true, "Use EMA slope filter")
+slope_len          = input.int(10, "Slope lookback bars")
+slope_min          = input.float(0.1, "Min EMA slope (points/bar)")
+
+// === Indicators ===
+ema_fast = ta.ema(close, ema_fast_len)
+ema_slow = ta.ema(close, ema_slow_len)
+atr      = ta.atr(atr_len)
+vwap_val = ta.vwap(hlc3)
+vol_sma  = ta.sma(volume, vol_sma_len)
+
+tick = syminfo.mintick
+if tick <= 0
+    tick := 0.25
+
+_slippage_px = input.int(1, "Slippage (ticks)") * tick
+
+// === Filters ===
+// ATR filter
+atr_ok = (not use_atr_filter) or (atr >= min_atr)
+
+// EMA slope filter
+ema_slow_slope = (ema_slow - ema_slow[slope_len]) / slope_len
+slope_ok = (not use_slope_filter) or (ema_slow_slope > slope_min)
+
+// === Session & Daily Counter ===
+in_session = true
+if use_time_filter
+    in_session := not na(time(timeframe.period, session_hours))
+
+new_day = ta.change(time("D")) != 0
+var int trades_today = 0
+if new_day
+    trades_today := 0
+
+// === Entry Conditions ===
+long_bias      = (not use_vwap) or (close > vwap_val and ema_fast > ema_slow)
+touched_ema    = low <= ema_fast
+lower_wick     = math.min(open, close) - low
+lower_wick_ok  = lower_wick >= (atr * min_lower_wick_atr_frac)
+vol_ok         = (not use_volume_confirm) or (volume > vol_sma * vol_mult)
+can_trade_today= (max_trades_per_day == 0) or (trades_today < max_trades_per_day)
+
+entry_condition = in_session and long_bias and touched_ema and close > ema_fast and lower_wick_ok and vol_ok and atr_ok and slope_ok and strategy.position_size == 0 and can_trade_today
+
+var int entry_bar = na
+
+// === Entry ===
+if entry_condition
+    strategy.entry("Long", strategy.long)
+
+// Track entry bar index
+if strategy.opentrades > 0 and strategy.opentrades[1] == 0
+    entry_bar := bar_index
+    trades_today += 1
+
+if strategy.opentrades == 0
+    entry_bar := na
+
+// === Exits ===
+if strategy.position_size > 0
+    entry_price = strategy.position_avg_price
+
+    stop_dist   = use_fixed_targets ? fixed_stop_ticks * tick : atr * atr_stop_mult
+    target_dist = use_fixed_targets ? fixed_target_ticks * tick : atr * atr_target_mult
+
+    stop_dist   := math.max(stop_dist, tick)
+    target_dist := math.max(target_dist, tick)
+
+    stop_price  = entry_price - stop_dist - _slippage_px
+    limit_price = entry_price + target_dist - _slippage_px
+
+    strategy.exit("Exit Long", from_entry="Long", stop=stop_price, limit=limit_price)
+
+    if plot_debug_labels and bar_index == entry_bar
+        label.new(bar_index, high, text="Stop: " + str.tostring(stop_price, format.mintick) + "\nLimit: " + str.tostring(limit_price, format.mintick), style=label.style_label_down, color=color.new(color.black,85), textcolor=color.white)

@@ -1,0 +1,45 @@
+//@version=5
+strategy("NQ Turtle Scalper - 1.5RR Test", overlay=true, pyramiding=0,
+         initial_capital=10000, default_qty_type=strategy.fixed, default_qty_value=2,
+         commission_value=0.55)
+
+//────────────── inputs ──────────────
+atrLen   = input.int(14, "ATR Period for Stop-Loss")
+atrMult  = input.float(2.0, "ATR Multiplier")
+rrRatio  = input.float(1.5, "Risk/Reward Ratio")
+lookback = input.int(20, "Lookback Period for High/Low")
+smaLen   = input.int(100, "SMA Trend Filter")
+
+//────────────── series ──────────────
+atr    = ta.atr(atrLen)
+sma100 = ta.sma(close, smaLen)
+hh20   = ta.highest(high, lookback)
+ll20   = ta.lowest(low,  lookback)
+
+//────────────── entry logic ──────────────
+longEntry  = (close > sma100) and ta.crossover(high, hh20[1])
+shortEntry = (close < sma100) and ta.crossunder(low,  ll20[1])
+
+if (longEntry)
+    strategy.entry("Long", strategy.long)
+
+if (shortEntry)
+    strategy.entry("Short", strategy.short)
+
+//────────────── exit logic (Simple 1.5 R/R Bracket) ──────────────
+// This logic will execute only on the bar of a new entry
+if (strategy.position_size != strategy.position_size[1])
+
+    // --- For Long Trades ---
+    if strategy.position_size > 0
+        riskPoints   = atr * atrMult
+        stopPrice    = strategy.position_avg_price - riskPoints
+        profitTarget = strategy.position_avg_price + riskPoints * rrRatio
+        strategy.exit("Exit Bracket", from_entry="Long", stop=stopPrice, limit=profitTarget)
+
+    // --- For Short Trades ---
+    if strategy.position_size < 0
+        riskPoints   = atr * atrMult
+        stopPrice    = strategy.position_avg_price + riskPoints
+        profitTarget = strategy.position_avg_price - riskPoints * rrRatio
+        strategy.exit("Exit Bracket", from_entry="Short", stop=stopPrice, limit=profitTarget)

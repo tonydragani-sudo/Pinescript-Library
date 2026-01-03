@@ -1,0 +1,47 @@
+//@version=5
+indicator("5-8-13 EMA – Time-Gated Cross", overlay = true, max_lines_count = 0, max_labels_count = 0)
+
+// ==== user inputs ====
+emaFastLen = input.int(5, "Fast EMA length")
+emaMidLen  = input.int(8, "Mid EMA length")
+emaSlowLen = input.int(13, "Slow EMA length")
+
+startAM  = input.session("0930-1100", "Morning window")
+startPM  = input.session("1400-1600", "Afternoon window")
+tz       = input.string("America/New_York", "Time-zone (match chart)")
+
+// ==== EMAs ====
+ema5  = ta.ema(close, emaFastLen)
+ema8  = ta.ema(close, emaMidLen)
+ema13 = ta.ema(close, emaSlowLen)
+
+plot(ema5,  color = color.blue,  title = "EMA 5")
+plot(ema8,  color = color.orange, title = "EMA 8")
+plot(ema13, color = color.red,    title = "EMA 13")
+
+// ==== time gate ====
+// session() returns true when the bar is inside the session string
+inAM  = time(timeframe.period, startAM, tz)
+inPM  = time(timeframe.period, startPM, tz)
+inWindow = not na(inAM) or not na(inPM)   // na() outside the window
+
+// ==== cross detection ====
+// cross() only on the bar it happens
+crossUp   = ta.crossover(close, ema13)    // price closes above 13-EMA
+crossDown = ta.crossunder(close, ema13)   // price closes below 13-EMA
+
+// ==== time-filtered alert trigger ====
+alertTrigger = (crossUp or crossDown) and inWindow
+
+// ==== visual helpers (optional) ====
+bgcolor(inWindow ? color.new(color.gray, 90) : na, title = "Trading window")
+
+// ==== alert ====
+// one alert() call covers both directions; message tells you which
+if alertTrigger
+    dir = crossUp ? "UP" : "DOWN"
+    alert("13-EMA cross " + dir + " @ " + str.tostring(close), alert.freq_once_per_bar)
+
+// ==== alert condition (alternative) ====
+// lets you pick “Any alert() function call” in the alert dialog
+alertcondition(alertTrigger, title = "13-EMA cross (time-gated)", message = "13-EMA cross during trading window")

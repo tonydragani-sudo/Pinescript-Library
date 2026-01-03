@@ -1,0 +1,20 @@
+//@version=6
+indicator("HH-LL non-repainting (1-bar offset)", overlay = true, max_lines_count = 1, max_labels_count = 1)
+
+// ————— user options
+len      = input.int(20, "Look-back length", minval = 1)
+showVal  = input.bool(true, "Show current values in Data Window?")
+srcHi    = input.source(high, "Source for Highest")
+srcLo    = input.source(low , "Source for Lowest")
+
+// ————— logic: build HH/LL from history *excluding* the current bar
+hh = ta.highest(srcHi, len)[1]   // [1]  → 1-bar offset
+ll = ta.lowest (srcLo, len)[1]
+
+// ————— plotting
+plot(hh, color = color.teal  , linewidth = 2, title = "Highest High (lag 1)")
+plot(ll, color = color.maroon, linewidth = 2, title = "Lowest Low  (lag 1)")
+
+// ————— alert conditions (pick these in the “Create Alert” dialog)
+alertcondition(ta.crossover (close, hh), title = "HH crossed", message = "Price crossed above 1-bar-lagged Highest High")
+alertcondition(ta.crossunder(close, ll), title = "LL crossed", message = "Price crossed below 1-bar-lagged Lowest Low")
